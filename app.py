@@ -6,6 +6,7 @@ import json
 import os
 from io import BytesIO
 from streamlit_autorefresh import st_autorefresh
+from yfinance.exceptions import YFRateLimitError
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
@@ -13,7 +14,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # Page Setup
 # -----------------------------
 st.set_page_config(page_title="Financial Dashboard", layout="wide")
-st_autorefresh(interval=30000, key="refresh")
+st_autorefresh(interval=300000, key="refresh")
 
 PINS_FILE = "pins.json"
 DEFAULT_PINS = ["AAPL", "MSFT", "NVDA"]
@@ -65,20 +66,76 @@ def format_market_cap(value):
     return f"${value:,.2f}"
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=900)
 def get_price_data(symbol, period="1y"):
-    df = yf.download(symbol, period=period, auto_adjust=False, progress=False)
-    return clean_columns(df)
+    try:
+        df = yf.download(symbol, period=period,
+                         auto_adjust=False, progress=False)
+        return clean_columns(df)
+    except YFRateLimitError:
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
+def build_stock_summary(symbol):
+    stock_data = get_price_data(symbol, period="1y")
+
+    if stock_data.empty:
+        return None
+
+    stock_data["Daily Return"] = stock_data["Close"].pct_change()
+
+    current_price = float(stock_data["Close"].iloc[-1])
+    first_price = float(stock_data["Close"].iloc[0])
+    stock_return = ((current_price - first_price) / first_price) * 100
+    stock_volatility = float(stock_data["Daily Return"].std()) * 100
+
+    return {
+        "Ticker": symbol,
+        "Current Price": round(current_price, 2),
+        "1Y Return %": round(stock_return, 2),
+        "Volatility %": round(stock_volatility, 2),
+    }
+    return {
+        "Ticker": symbol,
+        "Current Price": round(current_price, 2),
+        "1Y Return %": round(stock_return, 2),
+        "Volatility %": round(stock_volatility, 2),
+    }
+
+
+@st.cache_data(ttl=900)
+def get_price_data(symbol, period="1y"):
+    try:
+        df = yf.download(symbol, period=period,
+                         auto_adjust=False, progress=False)
+        return clean_columns(df)
+    except YFRateLimitError:
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
 def get_stock_info(symbol):
-    return yf.Ticker(symbol).info
+    try:
+        return yf.Ticker(symbol).info
+    except YFRateLimitError:
+        return {}
+    except Exception:
+        return {}
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def get_stock_news(symbol):
-    return yf.Ticker(symbol).news
+    try:
+        return yf.Ticker(symbol).news
+    except YFRateLimitError:
+        return []
+    except Exception:
+        return []
 
 
 def build_stock_summary(symbol):
@@ -162,6 +219,12 @@ if data.empty:
 
 info = get_stock_info(ticker)
 
+if not info:
+    st.warning(
+        "Some company information is temporarily unavailable because Yahoo Finance is rate-limiting requests. "
+        "Price data may still work. Please try again later."
+    )
+
 company_name = info.get("longName", ticker)
 sector = info.get("sector", "N/A")
 industry = info.get("industry", "N/A")
@@ -239,11 +302,15 @@ with overview_tab:
     fund_cols = st.columns(6)
 
     fund_cols[0].metric("P/E Ratio", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
-    fund_cols[1].metric("Forward P/E", f"{forward_pe:.2f}" if forward_pe else "N/A")
+    fund_cols[1].metric(
+        "Forward P/E", f"{forward_pe:.2f}" if forward_pe else "N/A")
     fund_cols[2].metric("Beta", f"{beta:.2f}" if beta else "N/A")
-    fund_cols[3].metric("52W High", f"${fifty_two_week_high:.2f}" if fifty_two_week_high else "N/A")
-    fund_cols[4].metric("52W Low", f"${fifty_two_week_low:.2f}" if fifty_two_week_low else "N/A")
-    fund_cols[5].metric("Dividend Yield", f"{dividend_yield * 100:.2f}%" if dividend_yield else "N/A")
+    fund_cols[3].metric(
+        "52W High", f"${fifty_two_week_high:.2f}" if fifty_two_week_high else "N/A")
+    fund_cols[4].metric(
+        "52W Low", f"${fifty_two_week_low:.2f}" if fifty_two_week_low else "N/A")
+    fund_cols[5].metric(
+        "Dividend Yield", f"{dividend_yield * 100:.2f}%" if dividend_yield else "N/A")
 
     st.subheader("Interactive Price History")
 
@@ -299,15 +366,17 @@ with overview_tab:
     st.subheader("Analyst Summary")
 
     if total_return > 0:
-        st.success(f"{ticker} has generated a positive return of {total_return:.2%} over the last year.")
+        st.success(
+            f"{ticker} has generated a positive return of {total_return:.2%} over the last year.")
     else:
-        st.warning(f"{ticker} has generated a negative return of {total_return:.2%} over the last year.")
+        st.warning(
+            f"{ticker} has generated a negative return of {total_return:.2%} over the last year.")
 
     if data["50 Day MA"].iloc[-1] > data["200 Day MA"].iloc[-1]:
         st.info("The stock is currently in an upward trend because the 50-Day Moving Average is above the 200-Day Moving Average.")
     else:
         st.info("The stock is currently in a weaker trend because the 50-Day Moving Average is below the 200-Day Moving Average.")
-        
+
 # -----------------------------
 # Portfolio Tab
 # -----------------------------
@@ -398,7 +467,8 @@ with news_tab:
 
                 title = content.get("title", "No Title")
                 news_summary = content.get("summary", "")
-                publisher = content.get("provider", {}).get("displayName", "Unknown Publisher")
+                publisher = content.get("provider", {}).get(
+                    "displayName", "Unknown Publisher")
 
                 url = (
                     content.get("clickThroughUrl", {}).get("url")
@@ -492,11 +562,16 @@ with export_tab:
     buffer = BytesIO()
 
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        overview_df.to_excel(writer, sheet_name="Overview", index=False, startrow=3)
-        portfolio_df.to_excel(writer, sheet_name="Portfolio", index=False, startrow=3)
-        comparison_df.to_excel(writer, sheet_name="Comparison", index=False, startrow=3)
-        watchlist_df.to_excel(writer, sheet_name="Watchlist", index=False, startrow=3)
-        price_history_df.to_excel(writer, sheet_name="Price History", index=False, startrow=3)
+        overview_df.to_excel(writer, sheet_name="Overview",
+                             index=False, startrow=3)
+        portfolio_df.to_excel(
+            writer, sheet_name="Portfolio", index=False, startrow=3)
+        comparison_df.to_excel(
+            writer, sheet_name="Comparison", index=False, startrow=3)
+        watchlist_df.to_excel(
+            writer, sheet_name="Watchlist", index=False, startrow=3)
+        price_history_df.to_excel(
+            writer, sheet_name="Price History", index=False, startrow=3)
 
         sheet_titles = {
             "Overview": f"{company_name} ({ticker}) - Overview",
@@ -506,7 +581,8 @@ with export_tab:
             "Price History": f"{company_name} ({ticker}) - Recent Price History",
         }
 
-        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+        header_fill = PatternFill(
+            start_color="1F4E78", end_color="1F4E78", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
         title_font = Font(size=14, bold=True, color="1F4E78")
         subtitle_font = Font(size=10, italic=True, color="666666")
@@ -537,7 +613,8 @@ with export_tab:
                     except Exception:
                         pass
 
-                worksheet.column_dimensions[column_letter].width = min(max_length + 2, 35)
+                worksheet.column_dimensions[column_letter].width = min(
+                    max_length + 2, 35)
 
             for row in worksheet.iter_rows():
                 for cell in row:
