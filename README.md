@@ -2,7 +2,7 @@
 
 
 
-This is an interactive financial dashboard built with Python and Streamlit. The app allows users to analyze stocks, track a small portfolio, compare tickers, view recent market news, and export a professional Excel report.
+Welcome to this interactive financial dashboard. Built using Python and Streamlit. The app will allow users to analyze stocks, track a small portfolio, compare tickers, view recent market news, and export a professional Excel report.
 
 
 
@@ -54,6 +54,22 @@ This is an interactive financial dashboard built with Python and Streamlit. The 
 
 
 
+\## Live App
+
+
+
+View the deployed dashboard here:
+
+
+
+https://financial-dashboard-python-kzzdmwfin53crricrseqbq.streamlit.app/
+
+
+
+This is an interactive financial dashboard built with Python and Streamlit.
+
+
+
 \## How to Run Locally
 
 
@@ -90,7 +106,7 @@ streamlit run app.py
 
 
 
-This project was created as a finance and data analytics portfolio project. It demonstrates the ability to collect financial data, calculate performance metrics, build an interactive dashboard, and export structured reports for analysis.
+This is my first solo project and was created as a finance and data analytics portfolio project. It hopefully demonstrates the ability to collect financial data, calculate performance metrics, build an interactive dashboard, and export structured reports for analysis.
 
 
 
@@ -98,7 +114,5 @@ This project was created as a finance and data analytics portfolio project. It d
 
 
 
-Stock data is provided through Yahoo Finance using the `yfinance` Python package. Financial data may vary depending on market availability and ticker support.
-
-
+The stock data is provided through Yahoo Finance using the `yfinance` Python package. Financial data may vary and fluctuate depending on market availability and ticker support.S
 
